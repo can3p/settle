@@ -13,16 +13,16 @@ func (noopConverter) Convert(a *money.Money, target money.Currency) (*money.Mone
 }
 
 func eurCurrency() money.Currency {
-	return *money.GetCurrency("EUR")
+	return *money.GetCurrency(money.EUR)
 }
 
 func TestSettlement_Settle(t *testing.T) {
-	john := testParticipant("john")
-	bill := testParticipant("bill")
-	harry := testParticipant("harry")
-	marry := testParticipant("marry")
-	alice := testParticipant("alice")
-	bob := testParticipant("bob")
+	john := StringParticipant("john")
+	bill := StringParticipant("bill")
+	harry := StringParticipant("harry")
+	marry := StringParticipant("marry")
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
 
 	tests := []struct {
 		name     string
@@ -147,10 +147,10 @@ func TestSettlement_Settle(t *testing.T) {
 }
 
 func TestSettlement_CurrencyConversion(t *testing.T) {
-	alice := testParticipant("alice")
-	bob := testParticipant("bob")
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
 
-	usd := func(amount int64) *money.Money { return money.New(amount, "USD") }
+	usd := func(amount int64) *money.Money { return money.New(amount, money.USD) }
 
 	s := NewSettlement(eurCurrency(), noopConverter{},
 		NewExpense(alice, usd(100), NewEvenLayout(alice, bob)),
@@ -168,9 +168,9 @@ func TestSettlement_CurrencyConversion(t *testing.T) {
 }
 
 func TestExpense_Split(t *testing.T) {
-	alice := testParticipant("alice")
-	bob := testParticipant("bob")
-	charlie := testParticipant("charlie")
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+	charlie := StringParticipant("charlie")
 
 	tests := []struct {
 		name    string
@@ -218,9 +218,9 @@ func TestExpense_Split(t *testing.T) {
 }
 
 func TestSettlement_Deterministic(t *testing.T) {
-	alice := testParticipant("alice")
-	bob := testParticipant("bob")
-	charlie := testParticipant("charlie")
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+	charlie := StringParticipant("charlie")
 
 	expenses := []Expense{
 		NewExpense(alice, eur(100), NewEvenLayout(alice, bob, charlie)),
@@ -251,6 +251,213 @@ func TestSettlement_Deterministic(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestSettlement_AddExpenses(t *testing.T) {
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+	charlie := StringParticipant("charlie")
+
+	s := NewSettlement(eurCurrency(), noopConverter{},
+		NewExpense(alice, eur(90), NewEvenLayout(alice, bob, charlie)),
+	)
+
+	s = s.AddExpenses(
+		NewExpense(bob, eur(60), NewEvenLayout(alice, bob, charlie)),
+	)
+
+	result, err := s.Settle()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertSettlement(t, result, map[string]map[string]int64{
+		"charlie": {"alice": 30, "bob": 20},
+		"bob":     {"alice": 10},
+	})
+}
+
+func TestSettlement_AddExpenses_Multiple(t *testing.T) {
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+
+	s := NewSettlement(eurCurrency(), noopConverter{})
+	s = s.AddExpenses(
+		NewExpense(alice, eur(100), NewEvenLayout(alice, bob)),
+		NewExpense(alice, eur(60), NewEvenLayout(alice, bob)),
+	)
+
+	result, err := s.Settle()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertSettlement(t, result, map[string]map[string]int64{
+		"bob": {"alice": 80},
+	})
+}
+
+func TestSettlement_AddRepayments(t *testing.T) {
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+	charlie := StringParticipant("charlie")
+
+	// Alice paid 90 for alice, bob, charlie -> bob owes 30, charlie owes 30
+	s := NewSettlement(eurCurrency(), noopConverter{},
+		NewExpense(alice, eur(90), NewEvenLayout(alice, bob, charlie)),
+	)
+
+	// Record that Bob already paid Alice 30
+	s = s.AddRepayments(Transfer{
+		From:   bob,
+		To:     alice,
+		Amount: eur(30),
+	})
+
+	result, err := s.Settle()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Bob's debt to Alice is cancelled, only Charlie still owes
+	assertSettlement(t, result, map[string]map[string]int64{
+		"charlie": {"alice": 30},
+	})
+}
+
+func TestSettlement_AddTransfers_PartialPayment(t *testing.T) {
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+
+	// Bob owes Alice 50
+	s := NewSettlement(eurCurrency(), noopConverter{},
+		NewExpense(alice, eur(100), NewEvenLayout(alice, bob)),
+	)
+
+	// Bob already paid 20 to Alice
+	s = s.AddRepayments(Transfer{
+		From:   bob,
+		To:     alice,
+		Amount: eur(20),
+	})
+
+	result, err := s.Settle()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Bob still owes 30
+	assertSettlement(t, result, map[string]map[string]int64{
+		"bob": {"alice": 30},
+	})
+}
+
+func TestSettlement_AddTransfers_Overpayment(t *testing.T) {
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+
+	// Bob owes Alice 50
+	s := NewSettlement(eurCurrency(), noopConverter{},
+		NewExpense(alice, eur(100), NewEvenLayout(alice, bob)),
+	)
+
+	// Bob already paid 70 to Alice (overpaid by 20)
+	s = s.AddRepayments(Transfer{
+		From:   bob,
+		To:     alice,
+		Amount: eur(70),
+	})
+
+	result, err := s.Settle()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Alice now owes Bob 20
+	assertSettlement(t, result, map[string]map[string]int64{
+		"alice": {"bob": 20},
+	})
+}
+
+func TestSettlement_AddExpensesAndTransfers_Combined(t *testing.T) {
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+	charlie := StringParticipant("charlie")
+
+	s := NewSettlement(eurCurrency(), noopConverter{})
+
+	s = s.AddExpenses(
+		NewExpense(alice, eur(90), NewEvenLayout(alice, bob, charlie)),
+	)
+
+	// Record already-done payments
+	s = s.AddRepayments(
+		Transfer{From: bob, To: alice, Amount: eur(10)},
+		Transfer{From: charlie, To: alice, Amount: eur(30)},
+	)
+
+	result, err := s.Settle()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// bob owed 30, paid 10 -> still owes 20
+	// charlie owed 30, paid 30 -> settled
+	assertSettlement(t, result, map[string]map[string]int64{
+		"bob": {"alice": 20},
+	})
+}
+
+func TestSettlement_AddTransfers_DoesNotMutateOriginal(t *testing.T) {
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+
+	s1 := NewSettlement(eurCurrency(), noopConverter{},
+		NewExpense(alice, eur(100), NewEvenLayout(alice, bob)),
+	)
+
+	// Adding a repayment returns a new settlement; s1 should be unchanged
+	s2 := s1.AddRepayments(Transfer{From: bob, To: alice, Amount: eur(50)})
+
+	r1, err := s1.Settle()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	r2, err := s2.Settle()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// s1 still has the original debt
+	assertSettlement(t, r1, map[string]map[string]int64{
+		"bob": {"alice": 50},
+	})
+	// s2 is fully settled
+	assertSettlement(t, r2, map[string]map[string]int64{})
+}
+
+func TestSettlement_AddExpenses_DoesNotMutateOriginal(t *testing.T) {
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+
+	s1 := NewSettlement(eurCurrency(), noopConverter{})
+	s2 := s1.AddExpenses(NewExpense(alice, eur(100), NewEvenLayout(alice, bob)))
+
+	r1, err := s1.Settle()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	r2, err := s2.Settle()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// s1 has no expenses
+	assertSettlement(t, r1, map[string]map[string]int64{})
+	// s2 has the added expense
+	assertSettlement(t, r2, map[string]map[string]int64{
+		"bob": {"alice": 50},
+	})
 }
 
 func assertSettlement(t *testing.T, got SettlementResult, want map[string]map[string]int64) {

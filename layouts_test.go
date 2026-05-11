@@ -6,11 +6,7 @@ import (
 	"github.com/Rhymond/go-money"
 )
 
-type testParticipant string
-
-func (t testParticipant) ParticipantID() string { return string(t) }
-
-func eur(amount int64) *money.Money { return money.New(amount, "EUR") }
+func eur(amount int64) *money.Money { return money.New(amount, money.EUR) }
 
 func assertParts(t *testing.T, got []ParticipantExpence, want map[string]int64) {
 	t.Helper()
@@ -33,9 +29,9 @@ func assertParts(t *testing.T, got []ParticipantExpence, want map[string]int64) 
 }
 
 func TestShareLayout_Split(t *testing.T) {
-	alice := testParticipant("alice")
-	bob := testParticipant("bob")
-	charlie := testParticipant("charlie")
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+	charlie := StringParticipant("charlie")
 
 	tests := []struct {
 		name    string
@@ -107,9 +103,9 @@ func TestShareLayout_Split(t *testing.T) {
 }
 
 func TestEvenLayout_Split(t *testing.T) {
-	alice := testParticipant("alice")
-	bob := testParticipant("bob")
-	charlie := testParticipant("charlie")
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+	charlie := StringParticipant("charlie")
 
 	tests := []struct {
 		name   string
@@ -144,9 +140,9 @@ func TestEvenLayout_Split(t *testing.T) {
 }
 
 func TestPctLayout_Split(t *testing.T) {
-	alice := testParticipant("alice")
-	bob := testParticipant("bob")
-	charlie := testParticipant("charlie")
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+	charlie := StringParticipant("charlie")
 
 	mustPct := func(p Participant, ppct uint) pct {
 		v, err := NewPct(p, ppct)
@@ -205,8 +201,8 @@ func TestPctLayout_Split(t *testing.T) {
 }
 
 func TestNewPctLayout_Validation(t *testing.T) {
-	alice := testParticipant("alice")
-	bob := testParticipant("bob")
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
 
 	mustPct := func(p Participant, ppct uint) pct {
 		v, err := NewPct(p, ppct)
@@ -257,7 +253,7 @@ func TestNewPctLayout_Validation(t *testing.T) {
 }
 
 func TestNewPct_Validation(t *testing.T) {
-	alice := testParticipant("alice")
+	alice := StringParticipant("alice")
 
 	_, err := NewPct(alice, HundredPercent+1)
 	if err == nil {
@@ -278,9 +274,9 @@ func (fixedRateConverter) Convert(a *money.Money, target money.Currency) (*money
 }
 
 func TestAbsLayout_Split(t *testing.T) {
-	alice := testParticipant("alice")
-	bob := testParticipant("bob")
-	charlie := testParticipant("charlie")
+	alice := StringParticipant("alice")
+	bob := StringParticipant("bob")
+	charlie := StringParticipant("charlie")
 
 	conv := fixedRateConverter{}
 
@@ -301,8 +297,8 @@ func TestAbsLayout_Split(t *testing.T) {
 			rest:   nil,
 			amount: eur(100),
 			want: []expectedExpence{
-				{"alice", 60, "EUR"},
-				{"bob", 40, "EUR"},
+				{"alice", 60, money.EUR},
+				{"bob", 40, money.EUR},
 			},
 		},
 		{
@@ -313,9 +309,9 @@ func TestAbsLayout_Split(t *testing.T) {
 			rest:   NewEvenLayout(bob, charlie),
 			amount: eur(100),
 			want: []expectedExpence{
-				{"alice", 50, "EUR"},
-				{"bob", 25, "EUR"},
-				{"charlie", 25, "EUR"},
+				{"alice", 50, money.EUR},
+				{"bob", 25, money.EUR},
+				{"charlie", 25, money.EUR},
 			},
 		},
 		{
@@ -326,9 +322,9 @@ func TestAbsLayout_Split(t *testing.T) {
 			rest:   NewShareLayout(NewShare(bob, 2), NewShare(charlie, 1)),
 			amount: eur(400),
 			want: []expectedExpence{
-				{"alice", 100, "EUR"},
-				{"bob", 200, "EUR"},
-				{"charlie", 100, "EUR"},
+				{"alice", 100, money.EUR},
+				{"bob", 200, money.EUR},
+				{"charlie", 100, money.EUR},
 			},
 		},
 		{
@@ -348,22 +344,22 @@ func TestAbsLayout_Split(t *testing.T) {
 			rest:   nil,
 			amount: eur(100),
 			want: []expectedExpence{
-				{"alice", 100, "EUR"},
+				{"alice", 100, money.EUR},
 			},
 		},
 		{
 			name: "cross-currency absolute reduces remainder via conversion",
 			abs: []ParticipantExpence{
-				NewParticipantExpence(alice, money.New(10, "USD")),
+				NewParticipantExpence(alice, money.New(10, money.USD)),
 			},
 			rest:   NewEvenLayout(alice, bob, charlie),
 			amount: eur(100),
 			// 10 USD converts to 10 EUR (1:1), remainder = 90 EUR / 3 = 30 each
 			want: []expectedExpence{
-				{"alice", 10, "USD"},
-				{"alice", 30, "EUR"},
-				{"bob", 30, "EUR"},
-				{"charlie", 30, "EUR"},
+				{"alice", 10, money.USD},
+				{"alice", 30, money.EUR},
+				{"bob", 30, money.EUR},
+				{"charlie", 30, money.EUR},
 			},
 		},
 	}
