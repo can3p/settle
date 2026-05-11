@@ -58,6 +58,14 @@ type ParticipantExpence struct {
 	amount      *money.Money
 }
 
+func NewExpense(payer Participant, amount *money.Money, layout ExpenseLayout) Expense {
+	return Expense{payer: payer, amount: amount, layout: layout}
+}
+
+func NewParticipantExpence(p Participant, amount *money.Money) ParticipantExpence {
+	return ParticipantExpence{participant: p, amount: amount}
+}
+
 type ExpenseLayout interface {
 	Split(a *money.Money) ([]ParticipantExpence, error)
 }

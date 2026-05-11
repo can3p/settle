@@ -20,9 +20,9 @@ Settlement result is represented as an array of transfers:
 
 ```
 type Transfer struct {
-    From string
-    To string
-    Amount Amount
+    From   Participant
+    To     Participant
+    Amount *money.Money
 }
 
 type SettlementResult []Transfer
@@ -49,7 +49,8 @@ Marry -> Bill 50 EUR
 The settlement would be:
 
 John -> Bill 25 EUR
-Marry -> Bill 25 EUR
+Marry -> Bill 50 EUR
+Marry -> John 25 EUR
 Harry -> John 25 EUR
 
 ### Participant
@@ -70,10 +71,10 @@ of the group. Any expense has an amount.
 #### Amount
 
 Amount is an actual money value in calculation. The amount is expressed in a minimal transferrable
-value. Why exactly this amount? Maybe we could tune it, but this library is not
-meant to be used for accounting and that's enough precision of all practical purposes.
+value (i.e. cents for EUR/USD). This library is not meant to be used for accounting and that's
+enough precision for all practical purposes.
 
-12.31 EUR will be 1231 EUR there. We're using [go-money](https://github.com/Rhymond/go-money) for that.
+12.31 EUR will be represented as 1231 internally. We're using [go-money](https://github.com/Rhymond/go-money) for that.
 
 ### Rounding
 
@@ -84,12 +85,11 @@ get the fractions.
 
 Here are the rules:
 
-- Every person's part is truncated down minimal transferable amount.
-- First participant gets the remainder.
-- Amounts are truncated to the minimal transferrable values in the final calculation
-- First participant absorbs the error.
+- Every person's part is truncated down to the minimal transferable amount.
+- First participant in the layout gets the remainder (the cents lost to truncation).
+- This ensures the total always adds up exactly to the expense amount.
 
-### Expence Layout
+### Expense Layout
 
 This is where things get interesting. There are many ways to split up the bill. To keep things
 simple in the beginning, here are few options:
@@ -122,8 +122,8 @@ Is out of scope for the library. You'll need to provide it yourself! Luckily the
 very simple
 
 ```
-type Convertor interface {
-    Convert(mnt *money.Money, target money.Currency) Amount
+type CurrencyConverter interface {
+    Convert(a *money.Money, target money.Currency) (*money.Money, error)
 }
 ```
 

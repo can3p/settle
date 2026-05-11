@@ -51,6 +51,7 @@ func (s Settlement) Settle() (SettlementResult, error) {
 
 			from := t.From.ParticipantID()
 			to := t.To.ParticipantID()
+
 			if existing, ok := hasTransfer(from, to); ok {
 				added, err := existing.Add(t.Amount)
 
@@ -66,7 +67,7 @@ func (s Settlement) Settle() (SettlementResult, error) {
 				}
 
 				if equals {
-					delete(sMap[to], from) // to transfers in opposite directions annihilate each other
+					delete(sMap[to], from) // transfers in opposite directions annihilate each other
 					continue
 				}
 
@@ -94,12 +95,20 @@ func (s Settlement) Settle() (SettlementResult, error) {
 					return nil, err
 				}
 
+				if sMap[from] == nil {
+					sMap[from] = map[string]Transfer{}
+				}
 				sMap[from][to] = Transfer{
 					From:   t.From,
 					To:     t.To,
 					Amount: diff,
 				}
 				delete(sMap[to], from) // new transfer is bigger than reverse transfer
+			} else {
+				if sMap[from] == nil {
+					sMap[from] = map[string]Transfer{}
+				}
+				sMap[from][to] = t
 			}
 		}
 	}
@@ -140,8 +149,9 @@ func (e Expense) Split() (SettlementResult, error) {
 		}
 
 		r = append(r, Transfer{
-			From: p.participant,
-			To:   e.payer,
+			From:   p.participant,
+			To:     e.payer,
+			Amount: p.amount,
 		})
 	}
 
