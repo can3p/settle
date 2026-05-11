@@ -118,14 +118,60 @@ Of course the original payer may or may not be amongst the participant. Poor Bil
 
 ### Currency conversion
 
-Is out of scope for the library. You'll need to provide it yourself! Luckily the interface is
-very simple
+The library requires a `CurrencyConverter` implementation:
 
 ```
 type CurrencyConverter interface {
     Convert(a *money.Money, target money.Currency) (*money.Money, error)
 }
 ```
+
+A built-in `staticConverter` is provided for fixed exchange rates. Rates are expressed
+in **full currency units** (the way you'd see them on a market ticker). The converter
+automatically handles the difference in fractional digits between currencies.
+
+#### Understanding the subunit problem
+
+go-money stores amounts in the smallest currency unit (subunits):
+- **USD**: stored in cents, so $100 = `10000`
+- **JPY**: has no subunits (Fraction=0), so ¥15000 = `15000`
+
+Exchange rates are normally quoted in full units: "1 USD = 150 JPY". The static converter
+bridges the gap — you pass the standard rate and it adjusts for differing subunit scales
+internally.
+
+#### Example: USD to JPY
+
+```go
+conv := settle.NewStaticConverter()
+// Standard market rate: 1 USD = 150 JPY
+conv.AddRate(money.USD, money.JPY, decimal.NewFromInt(150))
+
+// $100 is stored as 10000 (cents). The converter:
+// 1. Multiplies subunits by rate: 10000 × 150 = 1500000
+// 2. Adjusts for fraction difference (USD=2, JPY=0): 1500000 / 10^2 = 15000
+// Result: ¥15000
+result, _ := conv.Convert(money.New(100_00, money.USD), *money.GetCurrency(money.JPY))
+// result.Amount() == 15000
+
+// The inverse rate is registered automatically:
+// ¥15000 back to USD -> $100.00 (10000 cents)
+back, _ := conv.Convert(money.New(15000, money.JPY), *money.GetCurrency(money.USD))
+// back.Amount() == 10000
+```
+
+#### Example: EUR to USD (same subunit scale)
+
+```go
+conv := settle.NewStaticConverter()
+conv.AddRate(money.EUR, money.USD, decimal.NewFromFloat(1.1))
+
+// €50 (5000 cents) -> $55 (5500 cents). Same Fraction=2, no scaling needed.
+result, _ := conv.Convert(money.New(50_00, money.EUR), *money.GetCurrency(money.USD))
+// result.Amount() == 5500
+```
+
+For more complex or live rates, implement the `CurrencyConverter` interface yourself.
 
 ## Basic Usage
 
