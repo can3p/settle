@@ -16,7 +16,7 @@ record the data. What do we have here?
 Settlement is a process of deciding who owes what to whom. Settlement is done in one currency
 based on a number of expenses.
 
-Settlement is represented as an array of transfers:
+Settlement result is represented as an array of transfers:
 
 ```
 type Transfer struct {
@@ -25,7 +25,7 @@ type Transfer struct {
     Amount Amount
 }
 
-type Settlement []Transfer
+type SettlementResult []Transfer
 ```
 
 After the settlement all the members should have paid each other their fair share.
@@ -111,9 +111,10 @@ Of course the original payer may or may not be amongst the participant. Poor Bil
 
 ### Settlement calculation
 
-
-
-
+* For every expense the transfers are calculated
+* Every transfer is then converted to the target currency
+* All transfers are added up
+* The end list is always sorted to give the same output
 
 ### Currency conversion
 
@@ -122,7 +123,7 @@ very simple
 
 ```
 type Convertor interface {
-    Convert(mnt Amount, target Currency) Amount
+    Convert(mnt *money.Money, target money.Currency) Amount
 }
 ```
 
