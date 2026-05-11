@@ -6,6 +6,10 @@ type Participant interface {
 	ParticipantID() string
 }
 
+type StringParticipant string
+
+func (s StringParticipant) ParticipantID() string { return string(s) }
+
 type Transfer struct {
 	From   Participant
 	To     Participant

@@ -127,6 +127,70 @@ type CurrencyConverter interface {
 }
 ```
 
+## Basic Usage
+
+```go
+package main
+
+import (
+    "fmt"
+
+    "github.com/Rhymond/go-money"
+    "github.com/can3p/settle"
+)
+
+// Implement the CurrencyConverter interface (no-op for single currency)
+type NoopConverter struct{}
+
+func (NoopConverter) Convert(a *money.Money, target money.Currency) (*money.Money, error) {
+    return money.New(a.Amount(), target.Code), nil
+}
+
+func main() {
+    john := settle.StringParticipant("john")
+    bill := settle.StringParticipant("bill")
+    harry := settle.StringParticipant("harry")
+    marry := settle.StringParticipant("marry")
+
+    eur := *money.GetCurrency(money.EUR)
+
+    // Create a settlement with initial expenses
+    s := settle.NewSettlement(eur, NoopConverter{},
+        settle.NewExpense(john, money.New(100_00, money.EUR), settle.NewEvenLayout(john, bill, harry, marry)),
+    )
+
+    // Add more expenses later
+    s = s.AddExpenses(
+        settle.NewExpense(bill, money.New(100_00, money.EUR), settle.NewEvenLayout(john, marry)),
+    )
+
+    // Account for transfers that already happened (as reverse obligations)
+    // e.g. Harry already paid John 25 EUR
+    s = s.AddRepayments(settle.Transfer{
+        From:   john,
+        To:     harry,
+        Amount: money.New(25_00, money.EUR),
+    })
+
+    result, err := s.Settle()
+    if err != nil {
+        panic(err)
+    }
+
+    for _, t := range result {
+        fmt.Printf("%s -> %s: %s\n", t.From.ParticipantID(), t.To.ParticipantID(), t.Amount.Display())
+    }
+}
+```
+
+Key points:
+
+- Amounts are in minimal currency units (cents): 100 EUR = `10000`
+- `AddExpenses` appends expenses to an existing settlement
+- `AddRepayments` records already-completed payments — `Transfer{From: bob, To: alice, Amount: 30}`
+  means "Bob already sent Alice 30", which reduces Bob's debt accordingly
+- Both methods return a new `Settlement` value without mutating the original
+
 ## Licence
 
 MIT
