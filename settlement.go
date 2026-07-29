@@ -12,18 +12,19 @@ type Settlement struct {
 	converter  CurrencyConverter
 	expenses   []Expense
 	repayments []Transfer
+	optimizer  Optimizer
 }
 
 func NewSettlement(c money.Currency, converter CurrencyConverter, e ...Expense) Settlement {
-	return Settlement{c, converter, e, nil}
+	return Settlement{c, converter, e, nil, nil}
 }
 
 func (s Settlement) AddExpenses(expenses ...Expense) Settlement {
-	return Settlement{s.currency, s.converter, append(s.expenses, expenses...), s.repayments}
+	return Settlement{s.currency, s.converter, append(s.expenses, expenses...), s.repayments, s.optimizer}
 }
 
 func (s Settlement) AddRepayments(repayments ...Transfer) Settlement {
-	return Settlement{s.currency, s.converter, s.expenses, append(s.repayments, repayments...)}
+	return Settlement{s.currency, s.converter, s.expenses, append(s.repayments, repayments...), s.optimizer}
 }
 
 func (s Settlement) Settle() (SettlementResult, error) {
@@ -137,6 +138,14 @@ func (s Settlement) Settle() (SettlementResult, error) {
 		for _, t := range from {
 			result = append(result, t)
 		}
+	}
+
+	if s.optimizer != nil {
+		optimized, err := s.optimizer(result)
+		if err != nil {
+			return nil, err
+		}
+		result = optimized
 	}
 
 	slices.SortFunc(result, func(a, b Transfer) int {
