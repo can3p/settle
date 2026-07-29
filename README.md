@@ -116,6 +116,69 @@ Of course the original payer may or may not be amongst the participant. Poor Bil
 * All transfers are added up
 * The end list is always sorted to give the same output
 
+### Post-settlement optimization
+
+By default the library produces one transfer per netted debt between each pair
+of participants. A post-settlement optimization can reduce the **number of
+transactions** while preserving every participant's net balance.
+
+The library supports this through the functional-options pattern. Pass
+`WithOptimizer` with any `Optimizer` function:
+
+```go
+s := settle.NewSettlement(eur, conv, expenses...).
+    WithOptions(settle.WithOptimizer(settle.GreedyOptimizer))
+
+result, err := s.Settle()
+```
+
+A custom optimizer is any function matching the `Optimizer` signature:
+
+```go
+func myOptimizer(result settle.SettlementResult) (settle.SettlementResult, error) {
+    // ... reduce transactions ...
+    return optimized, nil
+}
+
+s := settle.NewSettlement(eur, conv, expenses...).
+    WithOptions(settle.WithOptimizer(myOptimizer))
+```
+
+#### Built-in: GreedyOptimizer
+
+`GreedyOptimizer` greedily matches the participant who is owed the most with
+the participant who owes the most. This is the same approach described in
+articles examining the Splitwise algorithm, e.g.
+[How Does the Splitwise Algorithm Work?](https://medium.com/@howoftech/how-does-the-splitwise-algorithm-work-dc1de5eaa371).
+
+The algorithm works in two phases:
+
+1. **Compute net balances** — for each participant, sum up how much they are
+   owed (positive) and how much they owe (negative).
+2. **Greedy matching** — sort participants by balance (debtors first,
+   creditors last) and use a two-pointer technique: the leftmost entry is the
+   max debtor and the rightmost is the max creditor. Settle the smaller of the
+   two balances between them, then advance the pointer of whichever participant
+   was zeroed out. Entries that cross to the wrong side are skipped. This
+   zeroes out at least one participant per iteration, so the result has at most
+   *n*−1 transfers for *n* participants with non-zero balances.
+
+The optimizer is applied **after** the raw settlement is computed and **before**
+the final sort, so the output remains deterministic. It is also carried over
+through `AddExpenses` and `AddRepayments`:
+
+```go
+s := settle.NewSettlement(eur, conv).
+    WithOptions(settle.WithOptimizer(settle.GreedyOptimizer)).
+    AddExpenses(expenses...)
+
+result, err := s.Settle()
+```
+
+> **Note:** The greedy algorithm does not always produce the absolute minimum
+> number of transactions (that problem is NP-hard in general), but it gives a
+> good approximation.
+
 ### Currency conversion
 
 The library requires a `CurrencyConverter` implementation:
@@ -236,6 +299,8 @@ Key points:
 - `AddRepayments` records already-completed payments — `Transfer{From: bob, To: alice, Amount: 30}`
   means "Bob already sent Alice 30", which reduces Bob's debt accordingly
 - Both methods return a new `Settlement` value without mutating the original
+- Pass `WithOptions(settle.WithOptimizer(settle.GreedyOptimizer))` to reduce the number of transactions
+  via greedy creditor/debtor matching (see [Post-settlement optimization](#post-settlement-optimization))
 
 ## Licence
 

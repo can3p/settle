@@ -1,0 +1,19 @@
+tools:
+    shell:
+        allow:
+            - find *
+            - head *
+            - ls *
+            - cd *
+            - go build *
+            - go test *
+            - go vet *
+            - git status
+            - git branch *
+            - tail *
+            - grep *
+            - git mv *
+            - sed *
+            - git diff *
+            - echo *
+            - git status *

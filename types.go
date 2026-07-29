@@ -51,6 +51,11 @@ func (t Transfer) Convert(c money.Currency, conv CurrencyConverter) (Transfer, e
 
 type SettlementResult []Transfer
 
+// Optimizer is a post-settlement optimization function that takes the
+// raw settlement result and returns an optimized version with fewer
+// transactions while preserving the net balance of each participant.
+type Optimizer func(SettlementResult) (SettlementResult, error)
+
 type Expense struct {
 	payer  Participant
 	amount *money.Money
